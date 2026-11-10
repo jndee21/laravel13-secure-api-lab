@@ -1,58 +1,69 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Laravel 13 RBAC API Lab
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This repository contains a completed Role-Based Access Control (RBAC) API project built using **Laravel 13** and **Laravel Sanctum**.
 
-## About Laravel
+## 1. Project Overview
+The API secures routes based on user authentication and assigned roles (`admin` vs `student`).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Public Routes:** `/api/login`
+- **Protected User Routes:** `/api/profile`
+- **Role-Restricted Routes:**
+  - `/api/admin/dashboard` (Admin only)
+  - `/api/student/dashboard` (Student only)
+  - `/api/students` (Admin & Student shared access)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## 2. API Routes (`routes/api.php`)
 
-## Learning Laravel
+```php
+<?php
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+// Public Login Route
+Route::post('/login', function (Request $request) {$request->validate([
+        'email' => 'required|email',
+        'password' => 'required',
+    ]);
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+    $user = User::where('email',$request->email)->first();
 
-## Agentic Development
+    if (! $user || ! Hash::check($request->password,$user->password)) {
+        return response()->json(['message' => 'Invalid credentials'], 401);
+    }
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+    $token =$user->createToken('auth_token')->plainTextToken;
 
-```bash
-composer require laravel/boost --dev
+    return response()->json([
+        'access_token' => $token,
+        'token_type' => 'Bearer',
+        'user' => $user,
+    ]);
+});
 
-php artisan boost:install
-```
+// Protected Routes (Sanctum)
+Route::middleware('auth:sanctum')->group(function () {
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+    Route::get('/profile', function (Request $request) {
+        return response()->json($request->user());
+    });
 
-## Contributing
+    Route::middleware('role:admin,student')->get('/students', function () {
+        return response()->json([
+            ['id' => 1, 'name' => 'John Doe', 'course' => 'BSIT'],
+            ['id' => 2, 'name' => 'Jane Smith', 'course' => 'BSCS'],
+        ]);
+    });
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+    Route::middleware('admin')->get('/admin/dashboard', function () {
+        return response()->json(['message' => 'Welcome to the Admin Dashboard!']);
+    });
 
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+    Route::middleware('role:student')->get('/student/dashboard', function () {
+        return response()->json(['message' => 'Welcome to the Student Dashboard!']);
+    });
+});
